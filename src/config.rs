@@ -5,11 +5,10 @@ use std::path;
 #[derive(Debug)]
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub global: Option<Global>,
-    // #[allow(dead_code)]
-    pub triggers: Option<Vec<Trigger>>,
-    // #[allow(dead_code)]
-    pub actions: Option<Vec<Action>>,
+    pub global: Global,
+    pub triggers: Vec<Trigger>,
+    pub actions: Vec<Action>,
+    pub rules: Vec<Rule>,
 }
 
 #[derive(Debug)]
@@ -32,14 +31,16 @@ pub struct Trigger {
     pub name: String,
     #[serde(rename = "type")] 
     pub typ: String,
-    pub value: Option<String>,
+    pub value: String,
 }
 
-// #[derive(serde::Deserialize)]
-// pub struct Rule {
-//     #[allow(dead_code)]
-//     pub name: String,
-// }
+#[derive(Debug)]
+#[derive(serde::Deserialize)]
+pub struct Rule {
+    pub name: String,
+    pub trigger: String,
+    pub actions: Vec<String>,
+}
 
 pub fn read_config(cfg_path: &str) -> Result<Config,std::io::Error>{
     println!("Read config \"{}\"", cfg_path);
@@ -57,7 +58,6 @@ fn read_config_file2(path: &path::Path) -> Result<Config, std::io::Error>{
         match conf_res {
             Ok(c) => Ok(c),
             Err(e) => Err(std::io::Error::new(ErrorKind::InvalidData,e.to_string()))
-        }
-    
+        }   
 }
 
