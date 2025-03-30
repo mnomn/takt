@@ -1,66 +1,70 @@
-from bottle import route, run, post
+from bottle import app, route, run, post, request
 import threading
 import time
 import requests
 import queue
 import os
+import json
 
 q = queue.SimpleQueue()
-
-def test_trigger1() -> bool:
-    time.sleep(2)
-    try:
-        res = requests.post("http://localhost:3000/trigger1")
-    except Exception as ex:
-        print("Connection error. Is target running?", ex)
-        return False
     
-    if not res.ok:
-         print("Failed to send trigger", res)
-         return False
-    try:
-        r = q.get(timeout=2)
-    except queue.Empty as e:
-        print("No response", e)
-        return False
 
+def test_post_trigger1():
+    time.sleep(1)
+    test_data = {"testxyz": 1}
+    res = requests.post("http://localhost:7357/trigger1", json=test_data)
+
+    assert(res.ok)
+
+    r = q.get(timeout=2)
     print("RECEIVED FROM Q", r)
     assert r["method"] == "POST"
     assert r["path"] == "test1"
-    return res.ok
+    assert r["body"] == test_data
+
+def test_put_trigger2():
+    time.sleep(1)
+    test_data = {"testxyz": 2}
+    res = requests.post("http://localhost:7357/trigger2", json=test_data)
+
+    assert(res.ok)
+
+    r = q.get(timeout=2)
+    print("RECEIVED FROM Q", r)
+    assert r["method"] == "PUT"
+    assert r["path"] == "test2"
+    assert r["body"] == test_data
+
+def not_a_test_two_actions():
+    # Trigger starts actionA and actionB
+    # ActionA, type generate, generates a json body "jsonA"
+    # ActionB, type http, receives json and posts it to testreceiver
+
+    test_data = {"testxyz": 1}
+    print ("TEST TRIGGER")
+    res = requests.post("http://localhost:3000/test_two_actions", json=test_data)
+    assert(res.ok)
+
+    expected_body = {}
+    # Statically generated data: {"test2": "generated"}
+    r = q.get(timeout=2)
+    print("RECEIVED FROM Q", r)
+    assert r["method"] == "POST"
+    assert r["path"] == "test2"
+    assert r["body"] == test_data
 
 def thread_function(name):
-
-    result = test_trigger1()
-
-    print("Test result:", result)
-    os._exit(0)
-
-#     print("NAME ", name)
-#     time.sleep(5)
-#     res = requests.post("http://localhost:3000/trigger1")
-#     r = q.get()
-#     print("RECEIVED FROM Q", r)
-#     assert r["method"] == "POST"
-#     assert r["path"] == "test1"
-#     if res.ok:
-#         print("RES OK, NOW EXIT!!!")
-# #           sys.exit() #  stderr.close()
-#         break
-
+    run(host='localhost', port=8000)
 
 x = threading.Thread(target=thread_function, args=(1,), daemon=True)
 x.start()
 
-@post('/<path>')
+# app = Bottle()
+@route('/<path>', method=['POST', 'PUT'])
 def index(path):
-    print("POST", path)
-    q.put({"method":"POST", "path": path})
+    print("Method ", request.method)
+    body = json.load(request.body)
+    print ("BODY ", body)
+    q.put({"method":request.method, "path": path, "body": body})
 
     return "OK"
-
-run(host='localhost', port=8000)
-
-x.join()
-
-print("DONE!!")
