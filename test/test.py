@@ -1,4 +1,4 @@
-from bottle import app, route, run, post, request
+from bottle import route, run, request
 import threading
 import time
 import requests
@@ -34,6 +34,11 @@ def test_put_trigger2():
     assert r["method"] == "PUT"
     assert r["path"] == "test2"
     assert r["body"] == test_data
+    hh = r["headers"]
+
+    # TODO: Why is apiKey reformatted to Apikey???
+    secret = hh.get("Apikey", "")
+    assert secret == "secret123"
 
 def not_a_test_two_actions():
     # Trigger starts actionA and actionB
@@ -65,6 +70,13 @@ def index(path):
     print("Method ", request.method)
     body = json.load(request.body)
     print ("BODY ", body)
-    q.put({"method":request.method, "path": path, "body": body})
+    print("REQ HEADERS", str(request.headers) )
+    headers = {}
+    for k in request.headers:
+        print("REQ HEADERS", str(k), request.headers.get(k) )
+        headers[k] = request.headers.get(k)
+        # headers.append((k, request.headers.get(k)))
+
+    q.put({"method":request.method, "path": path, "body": body, "headers": headers})
 
     return "OK"
