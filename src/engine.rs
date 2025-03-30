@@ -1,6 +1,7 @@
+use std::ops::Index;
 use std::thread;
 use std::sync::mpsc;
-use reqwest::{blocking, RequestBuilder};
+use reqwest::blocking;
 
 use crate::config::{Config, Rule, Action};
 use crate::CONFIG;
@@ -68,13 +69,25 @@ fn take_action(cfg: &Config, trig: &PostTrigger, ac: Vec<String>) -> Option<Stri
             println!("Invalid method {:}", m);
             return None;
         }
+
+        if let Some(headers) = action.headers.clone() {
+            for h in headers {
+                let mut parts = h.split(":");
+                let Some(key) = parts.next() else {
+                    continue;
+                };
+                let Some(val) = parts.next() else {
+                    continue;
+                };
+                builder = builder.header( key, val);
+            }
+        }
+
         let res_json = serde_json::from_str::<serde_json::Value>(&trig.body.as_str());
         if let Ok(j) = res_json {
-            println!("Add Json");
             builder = builder.json(&j);
         }
 
-        println!("BUILDER {:?}", builder);
         let result = builder.send();
         // let result = reqwest::blocking::post(action.target.clone());
         match result {

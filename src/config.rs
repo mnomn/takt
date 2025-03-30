@@ -22,6 +22,7 @@ pub struct Action {
     pub name: String,
     pub target: String,
     pub method: Option<String>,
+    pub headers: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
