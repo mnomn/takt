@@ -1,20 +1,32 @@
 use std::thread;
 use std::sync::mpsc;
+use reqwest::{blocking, RequestBuilder};
+
 use crate::config::{Config, Rule, Action};
 use crate::CONFIG;
 
 pub struct Engine {
-    tx: mpsc::Sender<String>,        
+    tx: mpsc::Sender<PostTrigger>,
+}
+
+pub struct PostTrigger {
+    rule: String,
+    body: String
 }
 
 impl Engine {
-    pub fn trigger(&self, trigger: String) -> Result<(), mpsc::SendError<String>>{
-        self.tx.send(trigger)
+    pub fn trigger(&self, rule: String, body: String) -> Result<(), mpsc::SendError<PostTrigger>>{
+        let req = PostTrigger{
+            rule: rule,
+            body: body
+        };
+
+        self.tx.send(req)
     }
 }
 
 pub fn start() -> Engine {
-    let (tx, rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
+    let (tx, rx): (mpsc::Sender<PostTrigger>, mpsc::Receiver<PostTrigger>) = mpsc::channel();
     let e = Engine {
         tx: tx,
     };
@@ -24,7 +36,7 @@ pub fn start() -> Engine {
     return e;
 }
 
-fn take_action(cfg: &Config, rule_name: String, ac: Vec<String>) -> Option<String>
+fn take_action(cfg: &Config, trig: &PostTrigger, ac: Vec<String>) -> Option<String>
 {
     println!("Take action {:?}", ac);
     let actions: Vec<&Action> = cfg.actions
@@ -35,13 +47,35 @@ fn take_action(cfg: &Config, rule_name: String, ac: Vec<String>) -> Option<Strin
     println!("Actions len {:}", actions.len());
     for action in actions {
         // let mm = action.method.as_ref();
-        println!("REST {:?} Action {:}", 
-        rule_name, 
-        action.target);
         let client = reqwest::blocking::Client::new();
-        let result = client
-        .post(action.target.clone())
-        .send();
+
+        // let result = client
+        // .post(action.target.clone())
+        // .send();
+
+        let mut builder: blocking::RequestBuilder;
+
+        let m = action.method.clone().unwrap_or ("POST".to_string());
+
+        let m = m.to_lowercase();
+        if m == "post" {
+            println!("POST");
+            builder = client.post(action.target.clone());
+        } else if m == "put" {
+            println!("PUT");
+            builder = client.put(action.target.clone());
+        } else {
+            println!("Invalid method {:}", m);
+            return None;
+        }
+        let res_json = serde_json::from_str::<serde_json::Value>(&trig.body.as_str());
+        if let Ok(j) = res_json {
+            println!("Add Json");
+            builder = builder.json(&j);
+        }
+
+        println!("BUILDER {:?}", builder);
+        let result = builder.send();
         // let result = reqwest::blocking::post(action.target.clone());
         match result {
             Ok(res) => {
@@ -51,21 +85,21 @@ fn take_action(cfg: &Config, rule_name: String, ac: Vec<String>) -> Option<Strin
         }
     }
     
-    Some(rule_name)
+    Some("OK".to_string())
 }
 
-fn engine_runner( rx: mpsc::Receiver<String>) {
+fn engine_runner( rx: mpsc::Receiver<PostTrigger>) {
     let cfg = CONFIG.get().unwrap();
 
     loop {
         let result = rx.recv();
         match result {
-            Ok(rule_name) => {
-                println!("Engine {}", rule_name);
-                let ru: Vec<&Rule>= cfg.rules.iter().filter(|r| r.name == rule_name).collect();
+            Ok(trig) => {
+                println!("Engine {}", trig.rule);
+                let ru: Vec<&Rule>= cfg.rules.iter().filter(|r| r.name == trig.rule).collect();
                 for rr in ru {
                     let acts = rr.actions.clone();
-                    take_action(cfg, rr.name.clone(), acts);
+                    take_action(cfg, &trig, acts);
                 }
             },
             Err(e) => println!("Receive failed {}", e),

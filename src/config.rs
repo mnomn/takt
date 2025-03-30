@@ -6,7 +6,6 @@ use std::path;
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub global: Global,
-    pub triggers: Vec<Trigger>,
     pub actions: Vec<Action>,
     pub rules: Vec<Rule>,
 }
@@ -18,20 +17,11 @@ pub struct Global {
 }
 
 #[derive(Debug)]
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Action {
     pub name: String,
     pub target: String,
     pub method: Option<String>,
-}
-
-#[derive(Debug)]
-#[derive(serde::Deserialize)]
-pub struct Trigger {
-    pub name: String,
-    #[serde(rename = "type")] 
-    pub typ: String,
-    pub value: String,
 }
 
 #[derive(Debug)]
@@ -46,18 +36,15 @@ pub fn read_config(cfg_path: &str) -> Result<Config,std::io::Error>{
     println!("Read config \"{}\"", cfg_path);
     let path = path::Path::new(cfg_path);
     if path.is_file() {
-        return read_config_file2(path);
+        return read_config_file(path);
     }
     return Err(std::io::Error::new(ErrorKind::Unsupported, "not a file"));
 }
 
-fn read_config_file2(path: &path::Path) -> Result<Config, std::io::Error>{
-    let file_data = read_to_string(path)?; 
-    let conf_res: Result<Config, toml::de::Error> =
-        toml::from_str(file_data.as_str());
-        match conf_res {
-            Ok(c) => Ok(c),
-            Err(e) => Err(std::io::Error::new(ErrorKind::InvalidData,e.to_string()))
-        }   
+fn read_config_file(path: &path::Path) -> Result<Config, std::io::Error>{
+    let file_data = read_to_string(path)?;
+    let file_str = file_data.as_str();
+
+    toml::from_str(file_str).map_err(|e| std::io::Error::new(ErrorKind::InvalidData,e.to_string()))
 }
 

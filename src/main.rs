@@ -3,8 +3,7 @@ use axum::{
     extract::{Path, State}, http::StatusCode, routing::{get, post}, Router, response::IntoResponse,
 };
 use std::sync::OnceLock;
-use config::{Config, Trigger, Rule};
-
+use config::{Config, Rule};
 use std::sync::Arc;
 pub mod config;
 pub mod engine;
@@ -19,31 +18,22 @@ async fn root() -> impl IntoResponse {
     (StatusCode::OK, "Get the world!".to_string())
 }
 
-fn get_triggers_for_path<'t>(conf: & 't Config, path: &String) -> Option<Vec<& 't Trigger>> {
-    let triggers: &Vec<Trigger> = &conf.triggers;
-    let triggers = triggers.iter().filter(|tr| tr.value == *path).collect();
-    Some(triggers)
-
-}
-
-fn get_rules_for_triggers<'r>(conf: & 'r Config, triggers: Vec<&Trigger>) -> Option<Vec<& 'r Rule>>{
-    let trs = triggers;
-    let rs = conf.rules.iter().filter(|r| trs.iter().any(|t| t.name == r.trigger)).collect();
-    Some(rs)
-}
-
 fn get_rules_for_path<'r>(conf: & 'r Config, path: &String) -> Option<Vec<& 'r Rule>>{
-    let triggers = get_triggers_for_path(conf, path)?;
-    let rules = get_rules_for_triggers(conf, triggers);
-    rules
+    let trigger1 = "post/".to_string() + path;
+    let trigger2 = "put/".to_string() + path;
+    let rules = conf.rules.iter().filter(|r| {r.trigger == trigger1 || r.trigger == trigger2}).collect();
+    Some(rules)
 }
 
-async fn post_root(Path(path): Path<String>,  State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn post_root(Path(path): Path<String>,
+                   State(state): State<Arc<AppState>>,
+                   body: String) -> impl IntoResponse {
     let x = Arc::clone(&state);
     let conf = CONFIG.get().unwrap();
     let engine = &x.engine;
     let rules = get_rules_for_path(conf, &path);
 
+    println!("BODY {}", body);
     let mut found_rule = false;
     if let Some(rs) = rules {
         println!("Found rules:");
@@ -51,7 +41,8 @@ async fn post_root(Path(path): Path<String>,  State(state): State<Arc<AppState>>
             // found_rule = true;
             println!("  Rule: {} {}", r.name, r.trigger);
             // TODO: Send to engine.
-            let rr = engine.trigger(r.name.clone());
+            let rr = engine.
+                trigger(r.name.clone(), body.clone());
             match rr {
                 Ok(_) => {
                     println!("Send to engine ok");
@@ -99,11 +90,13 @@ async fn main() {
     let app_state_arc = Arc::new(app_state);
     let app = Router::new()
     .route("/", get(root))
-    .route("/{trigger}", post(post_root))
+    .route("/{trigger}", post(post_root).put(post_root))
     .with_state(app_state_arc)
     ;
 
     // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let port = CONFIG.get().unwrap().global.port;
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
