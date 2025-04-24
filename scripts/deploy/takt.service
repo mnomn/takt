@@ -1,0 +1,9 @@
+[Unit]
+Description=Takt, trigger action.
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/takt /usr/local/etc/takt/takt.conf
+
+[Install]
+WantedBy=multi-user.target
